@@ -1,17 +1,31 @@
 class CSP:
+    legal_relations = {'<', '<=', '>=', '>', '!=', '='}
+    legal_operations = {'+', '*'}
 
     def __init__(self, domains: dict = dict(), constraints: set = set()):
         self.domains = domains
         self.constraints = constraints
 
-    def add_constraint(self, constraint: str):
-        if constraint != "all-diff":
-            self.constraints |= {constraint}
+    def add_constraint_semplified(self, lvar: str, relation: str, rvar: str, op: str = "+", constant: str = "0"):
+        # add constraint in linear form, e.g.: x1 != x2 + 2 | x1 != x2 * 3
+        if lvar in self.domains.keys() and rvar in self.domains.keys() and relation in CSP.legal_relations and \
+                op in CSP.legal_operations:
+            self.constraints.add((lvar, relation, rvar, op, constant))
         else:
-            for i in self.domains.keys():
-                for j in self.domains.keys():
-                    if i != j:
-                        self.add_constraint(f"{i}!={j}")
+            print(f"Constraint error: {lvar + relation + rvar + op + constant}")
+
+    def add_constraint(self, constraint: str):
+        if constraint == "all-diff":
+            var = list(self.domains.keys())
+            for i in range(l := len(var)):
+                for j in range(i + 1, l):
+                    self.add_constraint_semplified(var[i], '!=', var[j])
+        elif constraint == 'no-diagonal':
+            var = list(self.domains.keys())
+            for i in range(l := len(var)):
+                for j in range(i + 1, l):
+                    self.add_constraint_semplified(var[i], '!=', var[j], '+', str(i - j))
+                    self.add_constraint_semplified(var[i], '!=', var[j], '+', str(j - i))
 
     def add_variable(self, variable_name: str, domain: list = None):
         if variable_name == "" or variable_name in self.domains.keys():
@@ -36,7 +50,8 @@ class CSP:
 
     def print(self):
         print("Domanis:" + str(self.domains))
-        print("Constraints" + str(self.constraints))
+        for element in self.constraints:
+            print(element)
 
 
 class BacktrackSolver:
@@ -52,50 +67,13 @@ class BacktrackSolver:
     def check_consistency(self, current_config: dict = None):
         if current_config is None:
             current_config = self.state
-        cons = True
         for constraint in self.csp.constraints:
-            c = str(constraint)
-            c.replace(" ", "")
-            if c.find('<=') != -1:
-                if current_config[c[: c.find('<=')]] > current_config[c[c.find('<=') + 2:]] and \
-                        current_config[c[: c.find('<=')]] is not None and current_config[c[c.find('<=') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('>=') != -1:
-                if current_config[c[: c.find('>=')]] < current_config[c[c.find('>=') + 2:]] and \
-                        current_config[c[: c.find('>=')]] is not None and current_config[c[c.find('>=') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('==') != -1:
-                if current_config[c[: c.find('==')]] != current_config[c[c.find('==') + 2:]] and \
-                        current_config[c[: c.find('==')]] is not None and current_config[c[c.find('==') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('!=') != -1:
-                if current_config[c[: c.find('!=')]] == current_config[c[c.find('!=') + 2:]] and \
-                        current_config[c[: c.find('!=')]] is not None and current_config[c[c.find('!=') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('<') != -1:
-                if current_config[c[: c.find('<')]] >= current_config[c[c.find('<') + 2:]] and \
-                        current_config[c[: c.find('<')]] is not None and current_config[c[c.find('<') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('>') != -1:
-                if current_config[c[: c.find('>')]] <= current_config[c[c.find('>') + 2:]] and \
-                        current_config[c[: c.find('>')]] is not None and current_config[c[c.find('>') + 2:]] is not None:
-                    cons = False
-                    break
-            elif c.find('=') != -1:
-                if current_config[c[: c.find('=')]] != current_config[c[c.find('=') + 2:]] and \
-                        current_config[c[: c.find('=')]] is not None and current_config[c[c.find('=') + 2:]] is not None:
-                    cons = False
-                    break
-            else:
-                print('Constraint error: ' + constraint)
-                cons = False
-                break
-        return cons
+            if current_config[constraint[0]] is None or current_config[constraint[2]] is None:
+                continue
+            if not constraint_valid(current_config[constraint[0]], constraint[1], current_config[constraint[2]], \
+                                    constraint[3], constraint[4]):
+                return False
+        return True
 
     def is_assigned(self):
         for i in self.state.values():
@@ -113,11 +91,9 @@ class BacktrackSolver:
         for val in self.val_order(var):
             if self.check_consistency(self.state | {var: val}):
                 self.state |= {var: val}
-                # inf = self.inference(var, val)
-                inf = True
-                if inf:
+                if inf := ac_3(self.csp, get_other_neighbours(self.csp, var, "")):
                     result = self._solve()
-                    if result is not False:
+                    if result:
                         return result
                 self.state |= {var: None}
         return False
@@ -130,11 +106,80 @@ class BacktrackSolver:
         maxkey = None
         maxcardinality = -1
         for key in self.csp.domains.keys():
-            if len(self.csp.domains[key]) > maxcardinality:
-                maxcardinality = len(self.csp.domains[key])
+            if l := len(self.csp.domains[key]) > maxcardinality and self.state[key] is None:
+                maxcardinality = l
                 maxkey = key
         return maxkey
 
     def print(self):
         print(self.state)
         self.csp.print()
+
+
+def constraint_valid(lval: int, rel: str, rval: int, op: str, constant: str):
+    constant = int(constant)
+    if op == "+":
+        if rel == '<=':
+            return lval <= rval + constant
+        elif rel == '<':
+            return lval < rval + constant
+        elif rel == '>=':
+            return lval >= rval + constant
+        elif rel == '>':
+            return lval >= rval + constant
+        elif rel == '!=':
+            return lval != rval + constant
+        elif rel == '=':
+            return lval == rval + constant
+    elif op == "*":
+        if rel == '<=':
+            return lval <= rval * constant
+        elif rel == '<':
+            return lval < rval * constant
+        elif rel == '>=':
+            return lval >= rval * constant
+        elif rel == '>':
+            return lval >= rval * constant
+        elif rel == '!=':
+            return lval != rval * constant
+        elif rel == '=':
+            return lval == rval * constant
+    else:
+        print(f"Op invalid {rel}")
+        return False
+
+
+def get_other_neighbours(csp: CSP, xi: str, xj: str) -> list:
+    neighbours = []
+    for constraint in csp.constraints:
+        if (constraint[0] == xi and constraint[2] != xj) or (constraint[2] == xi and constraint[0] != xj):
+            neighbours.append(constraint)
+    return neighbours
+
+
+def revise(csp: CSP, arch: tuple) -> bool:
+    # arch = (x, op, y)
+    revised = False
+    for x_value in csp.domains[arch[0]]:
+        exist_y = False
+
+        # Check for xj legal val existence
+        for y_value in csp.domains[arch[2]]:
+            if constraint_valid(x_value, arch[1], y_value, arch[3], arch[4]):
+                exist_y = True
+                break
+        if not exist_y:
+            csp.domains[arch[0]].remove(x_value)
+            revised = True
+    return revised
+
+
+def ac_3(csp: CSP, queue: list) -> bool:
+    while len(queue) > 0:
+        arch = queue.pop()
+        if revise(csp, arch):
+            if len(csp.domains[arch[0]]) == 0:
+                return False
+            for element in get_other_neighbours(csp, arch[0], arch[2]):
+                queue |= element
+    return True

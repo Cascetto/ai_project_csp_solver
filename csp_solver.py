@@ -1,185 +1,238 @@
-class CSP:
-    legal_relations = {'<', '<=', '>=', '>', '!=', '='}
-    legal_operations = {'+', '*'}
-
-    def __init__(self, domains: dict = dict(), constraints: set = set()):
-        self.domains = domains
-        self.constraints = constraints
-
-    def add_constraint_semplified(self, lvar: str, relation: str, rvar: str, op: str = "+", constant: str = "0"):
-        # add constraint in linear form, e.g.: x1 != x2 + 2 | x1 != x2 * 3
-        if lvar in self.domains.keys() and rvar in self.domains.keys() and relation in CSP.legal_relations and \
-                op in CSP.legal_operations:
-            self.constraints.add((lvar, relation, rvar, op, constant))
-        else:
-            print(f"Constraint error: {lvar + relation + rvar + op + constant}")
-
-    def add_constraint(self, constraint: str):
-        if constraint == "all-diff":
-            var = list(self.domains.keys())
-            for i in range(l := len(var)):
-                for j in range(i + 1, l):
-                    self.add_constraint_semplified(var[i], '!=', var[j])
-        elif constraint == 'no-diagonal':
-            var = list(self.domains.keys())
-            for i in range(l := len(var)):
-                for j in range(i + 1, l):
-                    self.add_constraint_semplified(var[i], '!=', var[j], '+', str(i - j))
-                    self.add_constraint_semplified(var[i], '!=', var[j], '+', str(j - i))
-
-    def add_variable(self, variable_name: str, domain: list = None):
-        if variable_name == "" or variable_name in self.domains.keys():
-            print("Illegal varaible name")
-            return
-        self.domains |= {variable_name: set()}
-        self.add_domain(variable_name, domain)
-
-    def add_domain(self, var_name: str, queries: list):
-        if var_name not in self.domains.keys():
-            print("Wrong var name")
-            return
-        domain = set()
-        for query in queries:
-            sep = query.find('..')
-            if sep != -1:
-                val = {x for x in range(int(query[0: sep]), int(query[sep + 2:]) + 1)}
-            else:
-                val = {int(query)}
-            domain |= val
-        self.domains[var_name] |= domain
-
-    def print(self):
-        print("Domanis:" + str(self.domains))
-        for element in self.constraints:
-            print(element)
+from random import shuffle
+from math import inf
+from operator import itemgetter
 
 
-class BacktrackSolver:
+class CSP_cryptomath:
 
-    def __init__(self, csp: CSP):
-        self.csp = csp
-        self.state = {x: None for x in csp.domains.keys()}
-        for key in self.state.keys():
-            val = self.csp.domains[key].pop()
-            self.csp.domains[key].add(val)
-            self.state[key] = None
+    def __init__(self, word1: str = 'SEND', word2: str = 'MORE', word3: str = 'MONEY'):
+        word1 = word1.upper()
+        word2 = word2.upper()
+        word3 = word3.upper()
 
-    def check_consistency(self, current_config: dict = None):
-        if current_config is None:
-            current_config = self.state
-        for constraint in self.csp.constraints:
-            if current_config[constraint[0]] is None or current_config[constraint[2]] is None:
+        self.selected = set()
+        self.count = 0
+
+        self.domain = dict()
+        self.constraint = set()
+        self.state = dict()
+
+        for letter in (word1 + word2 + word3):
+            self.domain |= {letter: {x for x in range(0, 10)}}
+            self.state |= {letter: None}
+        w1 = word1[::-1]
+        w2 = word2[::-1]
+        w3 = word3[::-1]
+        s = ""
+        for e in self.domain.keys():
+            s += e
+        self.constraint |= {f"{word1[0]}!=0"}
+        self.constraint |= {f"{word2[0]}!=0"}
+        self.constraint |= {f"{word3[0]}!=0"}
+        length = max(len(w1), len(w2), len(w3))
+        query = ""
+        left = ""
+        right = ""
+        for i in range(l := len(d := [x for x in self.domain.keys()])):
+            for j in range(i + 1, l):
+                self.constraint |= {f"{d[i]}!={d[j]}"}
+
+            left += f"({w1[i] if i < len(w1) else 0}+{w2[i] if i < len(w2) else 0})*10^{i}+"
+            right += f"({w3[i] if i < len(w3) else 0})+"
+        left = left[:-1]
+        right = right[:-1]
+        self.constraint |= {left + '==' + right}
+
+        # for i in range(length):
+        #     if i == 0:
+        #         self.constraint |= {f"{w1[i] if len(w1) > i else '0'}+{w2[i] if len(w2) > i else '0'}=={w3[i] if len(w3) > i else '0'}"}
+        #     else:
+        #         self.constraint |= {
+        #             f"{w1[i] if len(w1) > i else '0'}+{w2[i] if len(w2) > i else '0'}+int(({w1[i - 1] if len(w1) > i - 1 else '0'}+{w2[i - 1] if len(w2) > i - 1 else '0'})/10)=={w3[i] if len(w3) > i else '0'}"}
+
+    def insert_val(self, constraint: str, state):
+        for key in state.keys():
+            constraint = constraint.replace(key, str(state[key]))
+        return constraint
+
+    def complete_assigned(self):
+        for val in self.state.values():
+            if val is None:
+                return False
+        return True
+
+    def check_constraint(self, constraint_set: set, temp_assign: dict = None):
+        state = self.state
+        if temp_assign is not None:
+            state |= temp_assign
+        for constraint in constraint_set:
+            skip = False
+            for key in state.keys():
+                if constraint.find(key) != -1 and state[key] is None:
+                    skip = True
+                    break
+            if skip:
                 continue
-            if not constraint_valid(current_config[constraint[0]], constraint[1], current_config[constraint[2]], \
-                                    constraint[3], constraint[4]):
+            cop = constraint
+            constraint = self.insert_val(constraint, state)
+            if not eval(constraint):
+                print(cop, constraint)
                 return False
         return True
 
-    def is_assigned(self):
-        for i in self.state.values():
-            if i is None:
+    def relevant_constraint(self, key) -> set:
+        result = set()
+        for cons in self.constraint:
+            if cons.find(key) != -1:
+                result |= {cons}
+        return result
+
+    def interested_constraints(self, xi: str, neighbours: set):
+        queue = {}
+        for cons in self.constraint:
+            for key in self.domain.keys():
+                if cons.find(xi) != -1 and cons.find(key) != -1:
+                    queue |= {cons}
+                    break
+        return queue
+
+    def constraints_cardinality(self, key):
+        count = 0
+        for cons in self.constraint:
+            if cons.find(key) != -1:
+                count += 1
+        return count
+
+
+class CSP_magicsequence:
+
+    def __init__(self, sequence_length: int):
+
+        self.domain = {}
+        self.count = 0
+
+        self.domain = dict()
+        self.constraint = set()
+        self.state = dict()
+
+        for i in range(sequence_length):
+            self.domain |= {f"S{i}": {x for x in range(sequence_length)}}
+            self.state |= {f"S{i}": None}
+            sumpositive = ""
+        for i in range(l := len(self.domain.keys())):
+            sumpositive += f"S{i}+"
+            query = f"S{i}=="
+            for j in range(l):
+                query += f"1*(S{j}=={i})+"
+            query = query[: -1]
+            self.constraint |= {query}
+        self.constraint |= {sumpositive[: -1]+"!=0"}
+
+    def insert_val(self, constraint: str, state):
+        for key in state.keys():
+            constraint = constraint.replace(key, str(state[key]))
+        return constraint
+
+    def complete_assigned(self):
+        for val in self.state.values():
+            if val is None:
                 return False
         return True
 
-    def solve(self):
-        return self._solve()
+    def check_constraint(self, constraint_set: set, temp_assign: dict = None):
+        state = self.state
+        if temp_assign is not None:
+            state |= temp_assign
+        for constraint in constraint_set:
+            skip = False
+            for key in state.keys():
+                if constraint.find(key) != -1 and state[key] is None:
+                    skip = True
+                    break
+            if skip:
+                continue
+            cop = constraint
+            constraint = self.insert_val(constraint, state)
+            if not eval(constraint):
+                return False
+        return True
 
-    def _solve(self):
-        if self.check_consistency() and self.is_assigned():
-            return self.state
-        var = self.sel_val()
-        for val in self.val_order(var):
-            if self.check_consistency(self.state | {var: val}):
-                self.state |= {var: val}
-                if inf := ac_3(self.csp, get_other_neighbours(self.csp, var, "")):
-                    result = self._solve()
-                    if result:
-                        return result
-                self.state |= {var: None}
-        return False
+    def relevant_constraint(self, key) -> set:
+        result = set()
+        for cons in self.constraint:
+            if cons.find(key) != -1:
+                result |= {cons}
+        return result
 
-    def val_order(self, var):
-        # todo sort logic
-        return list(self.csp.domains[var])
+    def interested_constraints(self, xi: str, neighbours: set):
+        queue = {}
+        for cons in self.constraint:
+            for key in self.domain.keys():
+                if cons.find(xi) != -1 and cons.find(key) != -1:
+                    queue |= {cons}
+                    break
+        return queue
 
-    def sel_val(self):
-        maxkey = None
-        maxcardinality = -1
-        for key in self.csp.domains.keys():
-            if l := len(self.csp.domains[key]) > maxcardinality and self.state[key] is None:
-                maxcardinality = l
-                maxkey = key
-        return maxkey
-
-    def print(self):
-        print(self.state)
-        self.csp.print()
-
-
-def constraint_valid(lval: int, rel: str, rval: int, op: str, constant: str):
-    constant = int(constant)
-    if op == "+":
-        if rel == '<=':
-            return lval <= rval + constant
-        elif rel == '<':
-            return lval < rval + constant
-        elif rel == '>=':
-            return lval >= rval + constant
-        elif rel == '>':
-            return lval >= rval + constant
-        elif rel == '!=':
-            return lval != rval + constant
-        elif rel == '=':
-            return lval == rval + constant
-    elif op == "*":
-        if rel == '<=':
-            return lval <= rval * constant
-        elif rel == '<':
-            return lval < rval * constant
-        elif rel == '>=':
-            return lval >= rval * constant
-        elif rel == '>':
-            return lval >= rval * constant
-        elif rel == '!=':
-            return lval != rval * constant
-        elif rel == '=':
-            return lval == rval * constant
-    else:
-        print(f"Op invalid {rel}")
-        return False
+    def constraints_cardinality(self, key):
+        count = 0
+        for cons in self.constraint:
+            if cons.find(key) != -1:
+                count += 1
+        return count
 
 
-def get_other_neighbours(csp: CSP, xi: str, xj: str) -> list:
-    neighbours = []
-    for constraint in csp.constraints:
-        if (constraint[0] == xi and constraint[2] != xj) or (constraint[2] == xi and constraint[0] != xj):
-            neighbours.append(constraint)
-    return neighbours
+def sel_var(csp: CSP_cryptomath):
+    minkey = None
+    mincardinality = inf
+    minconstraints = -1
+    for key in csp.domain.keys():
+        if (cardinality := len(csp.domain[key])) <= mincardinality and csp.state[key] is None:
+            if cardinality == mincardinality and csp.constraints_cardinality(key) <= minconstraints:
+                continue
+            mincardinality = cardinality
+            minconstraints = csp.constraints_cardinality(key)
+            minkey = key
+    return minkey
 
 
-def revise(csp: CSP, arch: tuple) -> bool:
-    # arch = (x, op, y)
-    revised = False
-    for x_value in csp.domains[arch[0]]:
-        exist_y = False
-
-        # Check for xj legal val existence
-        for y_value in csp.domains[arch[2]]:
-            if constraint_valid(x_value, arch[1], y_value, arch[3], arch[4]):
-                exist_y = True
-                break
-        if not exist_y:
-            csp.domains[arch[0]].remove(x_value)
-            revised = True
-    return revised
+def val_order(csp: CSP_cryptomath, var: str):
+    result = list(csp.domain[var])
+    shuffle(result)
+    return result
 
 
-def ac_3(csp: CSP, queue: list) -> bool:
+def backtrack(csp: CSP_cryptomath):
+    csp.count += 1
+    if csp.check_constraint(csp.constraint) and csp.complete_assigned():
+        return csp.state
+    var = sel_var(csp)
+    for val in val_order(csp, var):
+        if csp.check_constraint(csp.constraint, {var: val}):
+            csp.state |= {var: val}
+            # if ac_3(csp, var):
+            if True:
+                result = backtrack(csp)
+                if result:
+                    return result
+        csp.state |= {var: None}
+    return False
+
+
+def ac_3(csp: CSP_cryptomath, node: str):
+    queue = csp.relevant_constraint(node)
     while len(queue) > 0:
-        arch = queue.pop()
-        if revise(csp, arch):
-            if len(csp.domains[arch[0]]) == 0:
+        constraint = queue.pop()
+        interested_nodes = {}
+        for key in csp.domain.keys():
+            if constraint.find(key) != -1:
+                interested_nodes |= {key}
+        if revise(csp, constraint):
+            if len(csp.domain[node]) == 0:
                 return False
-            for element in get_other_neighbours(csp, arch[0], arch[2]):
-                queue |= element
+            queue |= csp.interested_constraints(node, csp.domain.keys() - interested_nodes)
     return True
+
+
+def revise(csp: CSP_cryptomath, constraint: str):
+    revised = False
+    # for

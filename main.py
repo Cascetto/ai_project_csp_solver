@@ -1,6 +1,6 @@
 from csp_solver import *
 
 if __name__ == '__main__':
-    csp = CSP_magicsequence(10)
+    csp = create_n_queen(8)
     print(backtrack(csp), csp.count)
 

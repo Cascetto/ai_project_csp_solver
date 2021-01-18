@@ -36,7 +36,7 @@ class CSP:
         # right = right[:-1]
         # self.constraint |= {left + '==' + right}
 
-    def add_variable(self, varname: str, d: list[str]) -> bool:
+    def add_variable(self, var_name: str, d: list[str]) -> bool:
         domain = set()
         for element in d:
             if (i := element.find('..')) != -1:
@@ -46,7 +46,8 @@ class CSP:
             else:
                 print("Domain error: " + element)
                 return False
-        self.domain |= {varname: domain}
+        self.domain |= {var_name: domain}
+        self.state |= {var_name: None}
         return True
 
     def add_constraint(self, constraint: str):
@@ -64,9 +65,9 @@ class CSP:
         return True
 
     def check_constraint(self, constraint_set: set, temp_assign: dict = None):
-        state = self.state
-        if temp_assign is not None:
-            state |= temp_assign
+        state = temp_assign
+        if state is None:
+            state = self.state
         for constraint in constraint_set:
             skip = False
             for key in state.keys():
@@ -105,7 +106,9 @@ class CSP:
                 count += 1
         return count
 
-    def insert_val(self, constraint: str, state):
+    # todo util?
+    @staticmethod
+    def insert_val(constraint: str, state):
         for key in state.keys():
             constraint = constraint.replace(key, str(state[key]))
         return constraint
@@ -190,14 +193,14 @@ class CSP:
 
 def sel_var(csp: CSP):
     minkey = None
-    mincardinality = inf
-    minconstraints = -1
+    min_cardinality = inf
+    min_constraints = -1
     for key in csp.domain.keys():
-        if (cardinality := len(csp.domain[key])) <= mincardinality and csp.state[key] is None:
-            if cardinality == mincardinality and csp.constraints_cardinality(key) <= minconstraints:
+        if (cardinality := len(csp.domain[key])) <= min_cardinality and csp.state[key] is None:
+            if cardinality == min_cardinality and csp.constraints_cardinality(key) <= min_constraints:
                 continue
-            mincardinality = cardinality
-            minconstraints = csp.constraints_cardinality(key)
+            min_cardinality = cardinality
+            min_constraints = csp.constraints_cardinality(key)
             minkey = key
     return minkey
 
@@ -213,7 +216,7 @@ def backtrack(csp: CSP):
         return csp.state
     var = sel_var(csp)
     for val in val_order(csp, var):
-        if csp.check_constraint(csp.constraint, {var: val}):
+        if csp.check_constraint(csp.constraint, csp.state | {var: val}):
             csp.state |= {var: val}
             # if ac_3(csp, var):
             if True:
@@ -252,7 +255,47 @@ def create_n_queen(n: int) -> CSP:
         nqueen.add_variable(var, [domain])
     for i in range(1, n + 1):
         for j in range(i + 1, n + 1):
-            nqueen.add_constraint(f"x{i}!=x{j}+{i-j}")
-            nqueen.add_constraint(f"x{i}!=x{j}+{j-i}")
+            nqueen.add_constraint(f"x{i}!=x{j}+{i - j}")
+            nqueen.add_constraint(f"x{i}!=x{j}+{j - i}")
     nqueen.add_constraint("all-different")
     return nqueen
+
+
+def create_n_sudoku(n: int):
+    sudoku = CSP()
+    nn = n * n
+    for i in range(1, nn + 1):
+        for j in range(1, nn + 1):
+            var = f"x{i}{j}"
+            domain = f"1..{nn + 1}"
+            sudoku.add_variable(var, [domain])
+
+    for i in range(1, nn + 1):
+        for J in range(1, nn + 1):
+            for j in range(J + 1, nn + 1):
+                sudoku.add_constraint(f"x{J}{i}!=x{j}{i}")
+                sudoku.add_constraint(f"x{i}{J}!=x{i}{j}")
+
+    for I in range(1, n + 1):
+        for J in range(1, n + 1):
+            for i in range(1, n + 1):
+                for j in range(1, n + 1):
+                    for ii in range(1, n + 1):
+                        for jj in range(1, n + 1):
+                            if i != ii or j != jj:
+                                constraint = f"x{n * (I - 1) + i}{n * (J - 1) + j}!=x{n * (I - 1) + ii}{n * (J - 1) + jj}"
+                                sudoku.add_constraint(constraint)
+
+    return sudoku
+
+
+def print_sudoku(n: int, solution: dict):
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            line = ""
+            for I in range(1, n + 1):
+                for J in range(1, n + 1):
+                    line += f"x{I + (i - 1)*n}{J + (j - 1)*n} "
+                line += "| "
+                line = CSP.insert_val(line, solution)
+            print(line+"\n-------------------------------------")

@@ -1,40 +1,16 @@
 from random import shuffle
-from math import inf
+from math import inf, ceil
 
 
 class CSP:
 
     def __init__(self):
 
+        self.explorations = 0
         self.domain = dict()
+        self.current_domain = dict()
         self.constraint = set()
         self.state = dict()
-
-        # for letter in (word1 + word2 + word3):
-        #     self.domain |= {letter: {x for x in range(0, 10)}}
-        #     self.state |= {letter: None}
-        # w1 = word1[::-1]
-        # w2 = word2[::-1]
-        # w3 = word3[::-1]
-        # s = ""
-        # for e in self.domain.keys():
-        #     s += e
-        # self.constraint |= {f"{word1[0]}!=0"}
-        # self.constraint |= {f"{word2[0]}!=0"}
-        # self.constraint |= {f"{word3[0]}!=0"}
-        # length = max(len(w1), len(w2), len(w3))
-        # query = ""
-        # left = ""
-        # right = ""
-        # for i in range(l := len(d := [x for x in self.domain.keys()])):
-        #     for j in range(i + 1, l):
-        #         self.constraint |= {f"{d[i]}!={d[j]}"}
-        #
-        #     left += f"({w1[i] if i < len(w1) else 0}+{w2[i] if i < len(w2) else 0})*10^{i}+"
-        #     right += f"({w3[i] if i < len(w3) else 0})+"
-        # left = left[:-1]
-        # right = right[:-1]
-        # self.constraint |= {left + '==' + right}
 
     def add_variable(self, var_name: str, d: list[str]) -> bool:
         domain = set()
@@ -47,6 +23,7 @@ class CSP:
                 print("Domain error: " + element)
                 return False
         self.domain |= {var_name: domain}
+        self.current_domain |= {var_name: domain}
         self.state |= {var_name: None}
         return True
 
@@ -71,40 +48,58 @@ class CSP:
         for constraint in constraint_set:
             skip = False
             for key in state.keys():
-                if constraint.find(key) != -1 and state[key] is None:
-                    skip = True
-                    break
+                if (p := constraint.find(key)) != -1:
+                    if (p + len(key) + 1 >= len(constraint) or constraint[p: p + len(key) + 1] not in self.state.keys()) and state[key] is None:
+                        skip = True
+                        break
             if skip:
                 continue
-            cop = constraint
-            constraint = self.insert_val(constraint, state)
-            if not eval(constraint):
-                print(cop, constraint)
+            if not eval(constraint, state):
                 return False
         return True
 
-    def relevant_constraint(self, key) -> set:
+    def get_neighbours(self, node) -> set:
+        # result = {x: set() for x in self.domain.keys()}
         result = set()
-        for cons in self.constraint:
-            if cons.find(key) != -1:
-                result |= {cons}
+        for constraint in self.constraint:
+            if node in constraint:
+                for key in (self.domain.keys() - {node}):
+                    if (p := constraint.find(key)) != -1 and self.state[key] is None:
+                        if p + len(key) + 1 >= len(constraint) or constraint[p: p + len(key) + 1] not in self.domain.keys():
+                            result |= {key}
         return result
 
-    def interested_constraints(self, xi: str, neighbours: set):
-        queue = {}
-        for cons in self.constraint:
-            for key in self.domain.keys():
-                if cons.find(xi) != -1 and cons.find(key) != -1:
-                    queue |= {cons}
-                    break
+    def interested_constraints(self, node: str, neighbour: str):
+        queue = set()
+        for constraint in self.constraint:
+            if (p := constraint.find(node)) != -1 and (p2 := constraint.find(neighbour)) != -1:
+                if (p + len(node) >= len(constraint) or constraint[p: p + len(node) + 1] not in self.domain.keys()) \
+                        and (p2 + len(neighbour) >= len(constraint) or \
+                        constraint[p2: p2 + len(neighbour) + 1] not in self.domain.keys()):
+                    queue |= {constraint}
         return queue
 
     def constraints_cardinality(self, key):
         count = 0
         for cons in self.constraint:
-            if cons.find(key) != -1:
-                count += 1
+            if (p := cons.find(key)) != -1:
+                if p + len(key) + 1 >= len(cons) or cons[p: p + len(key) + 1] not in self.domain.keys():
+                    count += 1
         return count
+
+    def assign(self, var: str, val: int, removed: dict):
+        if val in self.current_domain[var]:
+            removed[var] |= (self.current_domain[var] - {val})
+            self.current_domain[var] = {val}
+            self.state[var] = val
+
+    def unassign(self, var, val):
+        self.state[var] = None
+
+    def restore(self, crossouts: dict):
+        if crossouts is not False:
+            for element in crossouts.keys():
+                self.current_domain[element] |= crossouts[element]
 
     # todo util?
     @staticmethod
@@ -114,89 +109,12 @@ class CSP:
         return constraint
 
 
-# class CSP_magicsequence:
-#
-#     def __init__(self, sequence_length: int):
-#
-#         self.domain = {}
-#         self.count = 0
-#
-#         self.domain = dict()
-#         self.constraint = set()
-#         self.state = dict()
-#
-#         for i in range(sequence_length):
-#             self.domain |= {f"S{i}": {x for x in range(sequence_length)}}
-#             self.state |= {f"S{i}": None}
-#             sumpositive = ""
-#         for i in range(l := len(self.domain.keys())):
-#             sumpositive += f"S{i}+"
-#             query = f"S{i}=="
-#             for j in range(l):
-#                 query += f"1*(S{j}=={i})+"
-#             query = query[: -1]
-#             self.constraint |= {query}
-#         self.constraint |= {sumpositive[: -1] + "!=0"}
-#
-#     def insert_val(self, constraint: str, state):
-#         for key in state.keys():
-#             constraint = constraint.replace(key, str(state[key]))
-#         return constraint
-#
-#     def complete_assigned(self):
-#         for val in self.state.values():
-#             if val is None:
-#                 return False
-#         return True
-#
-#     def check_constraint(self, constraint_set: set, temp_assign: dict = None):
-#         state = self.state
-#         if temp_assign is not None:
-#             state |= temp_assign
-#         for constraint in constraint_set:
-#             skip = False
-#             for key in state.keys():
-#                 if constraint.find(key) != -1 and state[key] is None:
-#                     skip = True
-#                     break
-#             if skip:
-#                 continue
-#             cop = constraint
-#             constraint = self.insert_val(constraint, state)
-#             if not eval(constraint):
-#                 return False
-#         return True
-#
-#     def relevant_constraint(self, key) -> set:
-#         result = set()
-#         for cons in self.constraint:
-#             if cons.find(key) != -1:
-#                 result |= {cons}
-#         return result
-#
-#     def interested_constraints(self, xi: str, neighbours: set):
-#         queue = {}
-#         for cons in self.constraint:
-#             for key in self.domain.keys():
-#                 if cons.find(xi) != -1 and cons.find(key) != -1:
-#                     queue |= {cons}
-#                     break
-#         return queue
-#
-#     def constraints_cardinality(self, key):
-#         count = 0
-#         for cons in self.constraint:
-#             if cons.find(key) != -1:
-#                 count += 1
-#         return count
-
-
 def sel_var(csp: CSP):
     minkey = None
     min_cardinality = inf
     min_constraints = -1
     for key in csp.domain.keys():
-        if (cardinality := len(csp.domain[key])) <= min_cardinality and csp.state[key] is None:
+        if (cardinality := len(csp.current_domain[key])) <= min_cardinality and csp.state[key] is None:
             if cardinality == min_cardinality and csp.constraints_cardinality(key) <= min_constraints:
                 continue
             min_cardinality = cardinality
@@ -206,45 +124,93 @@ def sel_var(csp: CSP):
 
 
 def val_order(csp: CSP, var: str):
-    result = list(csp.domain[var])
-    shuffle(result)
+    scores = []
+    for value in csp.current_domain[var]:
+        score = 0
+        for rvar in csp.current_domain.keys() - {var}:
+            for rvalue in csp.current_domain[rvar]:
+                if csp.check_constraint(csp.constraint, csp.state | {var: value, rvar: rvalue}):
+                    score += 1
+        scores.append((value, score))
+    scores = sorted(scores, key=lambda x: x[1])
+    result = []
+    for i in range(len(scores)):
+        result.append(scores[i][0])
     return result
 
 
-def backtrack(csp: CSP):
+def backtrack(csp: CSP, inference):
     if csp.check_constraint(csp.constraint) and csp.complete_assigned():
         return csp.state
     var = sel_var(csp)
+    removed = {x: set() for x in csp.domain.keys()}
     for val in val_order(csp, var):
+        csp.explorations += 1
+        # new node explored
         if csp.check_constraint(csp.constraint, csp.state | {var: val}):
-            csp.state |= {var: val}
-            # if ac_3(csp, var):
-            if True:
-                result = backtrack(csp)
+            csp.assign(var, val, removed)
+            if inference(csp, var, removed) is not False:
+                result = backtrack(csp, inference)
                 if result:
                     return result
-        csp.state |= {var: None}
+        csp.restore(removed)
+        csp.unassign(var, val)
     return False
 
 
-def ac_3(csp: CSP, node: str):
-    queue = csp.relevant_constraint(node)
+def forward_checking(csp: CSP, node: str, removed: dict):
+    # queue in form of set of constraints
+    # queue = csp.relevant_constraint(node)
+    queue = set()
+    queue |= {(x, node) for x in csp.get_neighbours(node)}
     while len(queue) > 0:
-        constraint = queue.pop()
-        interested_nodes = {}
-        for key in csp.domain.keys():
-            if constraint.find(key) != -1:
-                interested_nodes |= {key}
-        if revise(csp, constraint):
-            if len(csp.domain[node]) == 0:
+        arch = queue.pop()
+        if _revise(csp, arch, removed) is not False:
+            if len(csp.current_domain[node]) == 0:
                 return False
-            queue |= csp.interested_constraints(node, csp.domain.keys() - interested_nodes)
     return True
 
 
-def revise(csp: CSP, constraint: str):
+def maintain_arc_consistncy(csp: CSP, node: str, removed: dict):
+    # queue in form of set of constraints
+    # queue = csp.relevant_constraint(node)
+    queue = set()
+    queue |= {(x, node) for x in csp.get_neighbours(node)}
+    while len(queue) > 0:
+        arch = queue.pop()
+        if _revise(csp, arch, removed) is not False:
+            if len(csp.current_domain[node]) == 0:
+                return False
+            # mac only
+            queue |= {(x, arch[0]) for x in (csp.get_neighbours(arch[0]))}
+    return True
+
+
+def no_inference(csp: CSP, node: str, removed: dict) -> True:
+    return True
+
+
+def _revise(csp: CSP, arch: tuple, removed: dict):
+    constraints = csp.interested_constraints(arch[0], arch[1])
+    invalid_values = set()
     revised = False
-    # for
+    for lvalue in csp.current_domain[arch[0]]:
+        valid = False
+        for rvalue in csp.current_domain[arch[1]]:
+            if csp.check_constraint(constraints, {arch[0]: lvalue, arch[1]: rvalue}):
+                valid = True
+                break
+        if not valid:
+            invalid_values |= {lvalue}
+    removal = set()
+    for element in invalid_values:
+        if element in csp.current_domain[arch[0]]:
+            removal |= {element}
+            revised = True
+    if revised:
+        csp.current_domain[arch[0]] -= removal
+        removed[arch[0]] |= removal
+    return revised
 
 
 def create_n_queen(n: int) -> CSP:
@@ -276,15 +242,13 @@ def create_n_sudoku(n: int):
                 sudoku.add_constraint(f"x{J}{i}!=x{j}{i}")
                 sudoku.add_constraint(f"x{i}{J}!=x{i}{j}")
 
-    for I in range(1, n + 1):
-        for J in range(1, n + 1):
-            for i in range(1, n + 1):
-                for j in range(1, n + 1):
-                    for ii in range(1, n + 1):
-                        for jj in range(1, n + 1):
-                            if i != ii or j != jj:
-                                constraint = f"x{n * (I - 1) + i}{n * (J - 1) + j}!=x{n * (I - 1) + ii}{n * (J - 1) + jj}"
-                                sudoku.add_constraint(constraint)
+    for xi in range(1, nn + 1):
+        for xj in range(1, nn + 1):
+            for yi in range(1, nn + 1):
+                for yj in range(1, nn + 1):
+                    if xi != yi and xj != yj and (constraint := f"x{yi}{yj}!=x{xi}{xj}") not in sudoku.constraint and \
+                            ceil(xi / n) == ceil(yi / n) and ceil(xj / n) == ceil(yj / n):
+                        sudoku.add_constraint(constraint)
 
     return sudoku
 
@@ -295,7 +259,18 @@ def print_sudoku(n: int, solution: dict):
             line = ""
             for I in range(1, n + 1):
                 for J in range(1, n + 1):
-                    line += f"x{I + (i - 1)*n}{J + (j - 1)*n} "
+                    line += str(solution[f"x{I + (i - 1) * n}{J + (j - 1) * n}"]) + " "
                 line += "| "
-                line = CSP.insert_val(line, solution)
-            print(line+"\n-------------------------------------")
+            print(line[: -2])
+        if i != n:
+            print("-" * (n * n * 2 + (n - 1) * 2 - 1))
+
+
+def print_queens(n: int, solution: dict):
+    print('----' * n)
+    for i in range(1, n + 1):
+        line = ""
+        for j in range(1, n + 1):
+            line += f"| {'#' if solution[f'x{i}'] == j else ' '} "
+        print(line+"|")
+        print('----' * n)

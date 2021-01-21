@@ -93,20 +93,13 @@ class CSP:
             self.current_domain[var] = {val}
             self.state[var] = val
 
-    def unassign(self, var, val):
+    def unassign(self, var):
         self.state[var] = None
 
     def restore(self, crossouts: dict):
         if crossouts is not False:
             for element in crossouts.keys():
                 self.current_domain[element] |= crossouts[element]
-
-    # todo util?
-    @staticmethod
-    def insert_val(constraint: str, state):
-        for key in state.keys():
-            constraint = constraint.replace(key, str(state[key]))
-        return constraint
 
 
 def sel_var(csp: CSP):
@@ -124,18 +117,21 @@ def sel_var(csp: CSP):
 
 
 def val_order(csp: CSP, var: str):
-    scores = []
-    for value in csp.current_domain[var]:
-        score = 0
-        for rvar in csp.current_domain.keys() - {var}:
-            for rvalue in csp.current_domain[rvar]:
-                if csp.check_constraint(csp.constraint, csp.state | {var: value, rvar: rvalue}):
-                    score += 1
-        scores.append((value, score))
-    scores = sorted(scores, key=lambda x: x[1])
-    result = []
-    for i in range(len(scores)):
-        result.append(scores[i][0])
+    if len(csp.current_domain) <= 16:
+        scores = []
+        for value in csp.current_domain[var]:
+            score = 0
+            for rvar in csp.current_domain.keys() - {var}:
+                for rvalue in csp.current_domain[rvar]:
+                    if csp.check_constraint(csp.constraint, csp.state | {var: value, rvar: rvalue}):
+                        score += 1
+            scores.append((value, score))
+        scores = sorted(scores, key=lambda x: x[1])
+        result = []
+        for i in range(len(scores)):
+            result.append(scores[i][0])
+    else:
+        shuffle(result := list(csp.current_domain[var]))
     return result
 
 
@@ -154,7 +150,7 @@ def backtrack(csp: CSP, inference):
                 if result:
                     return result
         csp.restore(removed)
-        csp.unassign(var, val)
+        csp.unassign(var)
     return False
 
 
